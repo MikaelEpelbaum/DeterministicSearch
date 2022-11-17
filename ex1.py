@@ -19,13 +19,13 @@ class TaxiProblem(search.Problem):
         # do we really need the self.taxis_start?
         self.taxis_start =initial["taxis"].copy()
         taxis = initial["taxis"]
-        taxis = {taxi: (taxis.get(taxi), []) for taxi in taxis.keys()}
+        # taxi: current state, passagengers, fuel, max capacity
+        taxis = {taxi: (taxis.get(taxi), [], taxis.get(taxi)["fuel"]) for taxi in taxis.keys()}
         passengers = initial["passengers"]
         self.map = np.array(initial["map"])
         state = {'taxis': taxis, 'passengers': passengers, 'remains': len(passengers)}
 
         search.Problem.__init__(self, repr(state))
-        #search.Problem.__init__(self, initial)
         
     def actions(self, state):
         """Returns all the actions that can be executed in the given
@@ -37,18 +37,20 @@ class TaxiProblem(search.Problem):
         taxis_dict = state["taxis"]
         taxis_actions = {taxi: [] for taxi in taxis_dict.keys()}
         passengers_to_collect = set(state["passengers"].keys())
+        refuel = []
         for taxi, taxi_details in taxis_dict.items():
             curr_pos = np.asarray(taxi_details[0]["location"])
-            curr_fuel = taxi_details[0]["fuel"]
+            curr_fuel = taxi_details[2]
             curr_capacity = len(taxi_details[1])
             all_moves = [curr_pos + np.asarray(step) for step in steps]
             for move in all_moves:
-                if 0 <= move[0] < n and 0 <= move[1] < m and self.map[move[0]][move[1]] == 'P':
+                if 0 <= move[0] < n and 0 <= move[1] < m:
                     taxis_actions[taxi].append(("move", taxi, tuple(move)))
             if taxis_dict[taxi][0]["capacity"] - curr_capacity > 0:
                 passengers_to_pick = \
                     [passenger for passenger, pos in state["passengers"].items() if pos == tuple(curr_pos) and passenger in passengers_to_pick]
                 if len(passengers_to_pick) > 0:
+                    # todo: change to add more than one persone on a position. there may be more than one persone on a position
                     taxis_actions[taxi].append(("pick up", taxi, passengers_to_pick[0]))
                     passengers_to_collect.remove(passengers_to_pick[0])
             if len(taxis_dict[taxi][1]) > 0:
@@ -61,11 +63,14 @@ class TaxiProblem(search.Problem):
                     else:
                         continue
                     break
+            if self.map[taxis_dict[taxi][0]["location"]] == 'G':
+                refuel = refuel.append(("refuel", taxi))
         all_actions = [a for a in taxis_actions.values()]
         impossibles = tuple(zip(*np.where(self.map == 'I')))
         possible_acctions = [action for action in all_actions[0] if action[2] not in impossibles]
         waits = list(("wait", taxi) for taxi in taxis_dict.keys())
-        possible_acctions = [possible_acctions + waits]
+        possible_acctions = [possible_acctions + waits + refuel]
+
         return [a for a in itertools.product(*possible_acctions)]
 
 

@@ -96,7 +96,7 @@ class TaxiProblem(search.Problem):
         """ This is the heuristic. It gets a node (not a state,
         state can be accessed via node.state)
         and returns a goal distance estimate"""
-        self.h_1(node)
+        # self.h_1(node)
         self.h_2(node)
         return 0
 
@@ -111,9 +111,44 @@ class TaxiProblem(search.Problem):
         """
         This is a slightly more sophisticated Manhattan heuristic
         """
+        state = eval(node.state)
+    #  sum(D(I))   manhattan distance unpicked passengers from destination
+        passengers_names = list(state["passengers"].keys())
+        picked_passengers = self.flatten([tax[1][1] for tax in [taxi for taxi in state["taxis"].items()]])
+        delivered_passengers = []
+        for passenger in state["passengers"]:
+            passeng = state["passengers"][passenger]
+            if passeng["location"] == passeng["destination"]:
+                # is passenger in taxi?
+                for taxi in state["taxis"]:
+                    if passenger in taxi[1]:
+                        break
+                delivered_passengers.append(passenger)
+        picked_or_delivered = picked_passengers + delivered_passengers
+        unpicked_passengers = self.subtract(passengers_names, picked_or_delivered)
+        unpicked_passengers_manhattan = 0
+        for pas in unpicked_passengers:
+            x = state["passengers"][pas]
+            unpicked_passengers_manhattan += self.manhattan(x["location"], x["destination"])
+        picked_and_destination_manhattan = 0
+        for pas in picked_or_delivered:
+            x = state["passengers"][pas]
+            picked_and_destination_manhattan += self.manhattan(x["location"], x["destination"])
+
+        taxis_sum = len(state["taxis"])
+        return (unpicked_passengers_manhattan+ picked_and_destination_manhattan)/taxis_sum
 
     """Feel free to add your own functions
     (-2, -2, None) means there was a timeout"""
+
+    def manhattan(self, a, b):
+        return sum(abs(val1 - val2) for val1, val2 in zip(a, b))
+
+    def flatten(self, l):
+        return [item for sublist in l for item in sublist]
+
+    def subtract(self, x, y):
+        return [item for item in x if item not in y]
 
 
 def create_taxi_problem(game):

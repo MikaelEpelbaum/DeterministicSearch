@@ -6,6 +6,7 @@ import itertools
 
 
 ids = ["111111111", "111111111"]
+# todo: update the remains field at each drop off
 
 
 class TaxiProblem(search.Problem):
@@ -32,6 +33,8 @@ class TaxiProblem(search.Problem):
         state. The result should be a tuple (or other iterable) of actions
         as defined in the problem description file"""
         state = eval(state)
+        if state["remains"] == 0:
+            return
         n, m = np.shape(self.map)
         steps = [(0, 1), (1, 0), (0, -1), (-1, 0)]
         taxis_dict = state["taxis"]
@@ -43,22 +46,26 @@ class TaxiProblem(search.Problem):
             curr_fuel = taxi_details[2]
             curr_capacity = len(taxi_details[1])
             all_moves = [curr_pos + np.asarray(step) for step in steps]
+            # all possible direction movement listing
             for move in all_moves:
                 if 0 <= move[0] < n and 0 <= move[1] < m:
                     taxis_actions[taxi].append(("move", taxi, tuple(move)))
             if taxis_dict[taxi][0]["capacity"] - curr_capacity > 0:
+                # passegers that can be piked listing
                 passengers_to_pick = \
                     [passenger for passenger, pos in state["passengers"].items() if pos == tuple(curr_pos) and passenger in passengers_to_pick]
+                # redo the following if
                 if len(passengers_to_pick) > 0:
-                    # todo: change to add more than one persone on a position. there may be more than one persone on a position
                     taxis_actions[taxi].append(("pick up", taxi, passengers_to_pick[0]))
                     passengers_to_collect.remove(passengers_to_pick[0])
+            # does the taxi has passengers?
             if len(taxis_dict[taxi][1]) > 0:
                 passengers = [passenger for passenger, loc_pos in state["passengers"].items() if loc_pos["destination"] == tuple(curr_pos)]
                 for c in passengers:
                     for p in taxis_dict[taxi][1]:
                         if p in state["clients"][c][0]:
                             taxis_actions[taxi].append(("drop off", taxi, c, p))
+                            state["remains"] = state["remains"] -1
                             break
                     else:
                         continue
@@ -89,12 +96,16 @@ class TaxiProblem(search.Problem):
         """ This is the heuristic. It gets a node (not a state,
         state can be accessed via node.state)
         and returns a goal distance estimate"""
+        self.h_1(node)
+        self.h_2(node)
         return 0
 
     def h_1(self, node):
-        """
-        This is a simple heuristic
-        """
+        state = eval(node.state)
+        picked_undelivered_sum = sum([len(state["taxis"][taxi][1]) for taxi in state["taxis"]])
+        unpicked = state["remains"] - picked_undelivered_sum
+        taxis_sum = len(state["taxis"])
+        return (picked_undelivered_sum*2 + unpicked)/taxis_sum
 
     def h_2(self, node):
         """

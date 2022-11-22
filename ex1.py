@@ -3,6 +3,7 @@ import random
 import math
 import numpy as np
 import itertools
+import json
 
 
 ids = ["111111111", "111111111"]
@@ -11,12 +12,10 @@ ids = ["111111111", "111111111"]
 
 class TaxiProblem(search.Problem):
     """This class implements a medical problem according to problem description file"""
-
     def __init__(self, initial):
         """Don't forget to implement the goal test
         You should change the initial to your own representation.
         search.Problem.__init__(self, initial) creates the root node"""
-
         # do we really need the self.taxis_start?
         self.taxis_start =initial["taxis"].copy()
         taxis = initial["taxis"]
@@ -49,6 +48,7 @@ class TaxiProblem(search.Problem):
             # all possible direction movement listing
             for move in all_moves:
                 if 0 <= move[0] < n and 0 <= move[1] < m:
+                    # bug: list or tuple
                     taxis_actions[taxi].append(("move", taxi, tuple(move)))
             if taxis_dict[taxi][0]["capacity"] - curr_capacity > 0:
                 # passegers that can be piked listing
@@ -70,8 +70,10 @@ class TaxiProblem(search.Problem):
                     else:
                         continue
                     break
-            if self.map[taxis_dict[taxi][0]["location"]] == 'G':
-                refuel = refuel.append(("refuel", taxi))
+
+            # if self.item[taxis_dict[taxi][0]["location"]] == 'G':
+            if self.map[tuple([taxis_dict[taxi][0]["location"]][0])] == 'G':
+                refuel = [("refuel", taxi)]
         all_actions = [a for a in taxis_actions.values()]
         impossibles = tuple(zip(*np.where(self.map == 'I')))
         possible_acctions = [action for action in all_actions[0] if action[2] not in impossibles]
@@ -80,25 +82,59 @@ class TaxiProblem(search.Problem):
 
         return [a for a in itertools.product(*possible_acctions)]
 
-
-
-
     def result(self, state, action):
         """Return the state that results from executing the given
         action in the given state. The action must be one of
         self.actions(state)."""
+        state = eval(state)
+        state = json.loads(json.dumps(state))
+        # it's a for because there may be more than one taxi thus actions
+        for taxi_a in action:
+
+            if len(taxi_a) < 3:
+                taxi = taxi_a[1]
+                if taxi == "wait":
+                    continue
+                else:
+                    state["taxis"][taxi][2] = state["taxis"][taxi][0]["fuel"]
+                    continue
+
+            taxi = taxi_a[1]
+            pos = state["taxis"][taxi][0]["location"]
+
+            if taxi_a[0] == "pick up":
+                passenger = taxi_a[2]
+                state["taxis"][taxi][1].append(passenger)
+                del (state["passengers"][passenger])
+
+            if taxi_a[0] == "move":
+                state["taxis"][taxi][0]["location"] = list(taxi_a[2])
+                state["taxis"][taxi][2] = state["taxis"][taxi][2] - 1
+
+            if taxi_a[0] == "drop off":
+                passenger = taxi_a[3]
+                clients = [client for client, det in state["clients"].items() if det[1] == pos and passenger in det[0]]
+                for c in clients:
+                    state["clients"][c][0].remove(passenger)
+                state["to_drop_off"] = state["to_drop_off"] - 1
+                state["taxis"][taxi][1].remove(passenger)
+
+        return repr(state)
 
     def goal_test(self, state):
         """ Given a state, checks if this is the goal state.
          Returns True if it is, False otherwise."""
+        s = eval(state)
+        if s["remains"] > 0:
+            return False
+        return True
 
     def h(self, node):
         """ This is the heuristic. It gets a node (not a state,
         state can be accessed via node.state)
         and returns a goal distance estimate"""
-        # self.h_1(node)
-        self.h_2(node)
-        return 0
+        return self.h_1(node)
+        # return self.h_2(node)
 
     def h_1(self, node):
         state = eval(node.state)

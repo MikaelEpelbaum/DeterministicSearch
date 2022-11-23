@@ -5,13 +5,15 @@ import numpy as np
 import itertools
 import json
 
-
 ids = ["111111111", "111111111"]
+
+
 # todo: update the remains field at each drop off
 
 
 class TaxiProblem(search.Problem):
     """This class implements a medical problem according to problem description file"""
+
     def __init__(self, initial):
         """Don't forget to implement the goal test
         You should change the initial to your own representation.
@@ -21,13 +23,14 @@ class TaxiProblem(search.Problem):
         # fuel level changing bugs the priority queue
         taxis = {taxi: (taxis.get(taxi), []) for taxi in taxis.keys()}
         self.fuels = {taxi: (taxis.get(taxi)[0]['fuel']) for taxi in taxis.keys()}
+        self.capacity = {taxi: (taxis.get(taxi)[0]['capacity']) for taxi in taxis.keys()}
         passengers = initial["passengers"]
         # boolean False to indicate passenger wasn't picked yet
         passengers = {passenger: (passengers.get(passenger), False) for passenger in passengers.keys()}
         state = {'taxis': taxis, 'passengers': passengers, 'remains': len(passengers)}
 
         search.Problem.__init__(self, repr(state))
-        
+
     def actions(self, state):
         """Returns all the actions that can be executed in the given
         state. The result should be a tuple (or other iterable) of actions
@@ -52,12 +55,14 @@ class TaxiProblem(search.Problem):
                 if 0 <= move[0] < n and 0 <= move[1] < m:
                     taxis_actions[taxi].append(("move", taxi, tuple(move)))
             # passegers that can be piked listing
-            passengers_to_pick = [passenger for passenger in passengers_to_collect if tuple(passengers[passenger][0]["location"]) == tuple(curr_pos)]
+            passengers_to_pick = [passenger for passenger in passengers_to_collect if
+                                  tuple(passengers[passenger][0]["location"]) == tuple(curr_pos)]
             for pas in passengers_to_pick:
                 taxis_actions[taxi].append(("pick up", taxi, pas))
             # does the taxi has passengers?
             if len(taxis_dict[taxi][1]) > 0:
-                to_drop_off = [passenger for passenger, loc_pos in passengers.items() if loc_pos[0]["destination"] == loc_pos[0]["location"]]
+                to_drop_off = [passenger for passenger, loc_pos in passengers.items() if
+                               loc_pos[0]["destination"] == loc_pos[0]["location"]]
                 for pas in to_drop_off:
                     taxis_actions[taxi].append(("drop off", taxi, pas))
             if self.map[tuple([taxis_dict[taxi][0]["location"]][0])] == 'G':
@@ -81,7 +86,7 @@ class TaxiProblem(search.Problem):
 
             if len(taxi_a) < 3:
                 taxi = taxi_a[1]
-                if taxi == "wait":
+                if taxi_a[0] == "wait":
                     continue
                 else:
                     state["taxis"][taxi][0]["fuel"] = self.fuels.get(taxi)
@@ -94,7 +99,6 @@ class TaxiProblem(search.Problem):
                 passenger = taxi_a[2]
                 state["taxis"][taxi][1].append(passenger)
                 state["passengers"][passenger][1] = True
-
 
             if taxi_a[0] == "move" and state["taxis"][taxi][0]["fuel"] > 0:
                 state["taxis"][taxi][0]["location"] = list(taxi_a[2])
@@ -109,6 +113,8 @@ class TaxiProblem(search.Problem):
                 del state["passengers"][passenger]
                 state['taxis'][taxi_a[1]][1].remove(passenger)
                 state['remains'] -= 1
+                # state["passengers"][passenger][2] = True
+
         return repr(state)
 
     def goal_test(self, state):
@@ -123,46 +129,60 @@ class TaxiProblem(search.Problem):
         """ This is the heuristic. It gets a node (not a state,
         state can be accessed via node.state)
         and returns a goal distance estimate"""
-        return self.h_1(node)
-        # return self.h_2(node)
+        # return self.h_1(node)
+        return self.h_2(node)
 
     def h_1(self, node):
         state = eval(node.state)
         picked_undelivered_sum = sum([len(state["taxis"][taxi][1]) for taxi in state["taxis"]])
         unpicked = state["remains"] - picked_undelivered_sum
         taxis_sum = len(state["taxis"])
-        return (picked_undelivered_sum*2 + unpicked)/taxis_sum
+        return (picked_undelivered_sum * 2 + unpicked) / taxis_sum
 
     def h_2(self, node):
         """
         This is a slightly more sophisticated Manhattan heuristic
         """
         state = eval(node.state)
-    #  sum(D(I))   manhattan distance unpicked passengers from destination
-        passengers_names = list(state["passengers"].keys())
-        picked_passengers = self.flatten([tax[1][1] for tax in [taxi for taxi in state["taxis"].items()]])
-        delivered_passengers = []
+        #  sum(D(I))   manhattan distance unpicked passengers from destination
+        sum_D_i = 0
+        sum_T_i = 0
+        sum_of_capacity = 0
         for passenger in state["passengers"]:
-            passeng = state["passengers"][passenger]
-            if passeng["location"] == passeng["destination"]:
-                # is passenger in taxi?
-                for taxi in state["taxis"]:
-                    if passenger in taxi[1]:
-                        break
-                delivered_passengers.append(passenger)
-        picked_or_delivered = picked_passengers + delivered_passengers
-        unpicked_passengers = self.subtract(passengers_names, picked_or_delivered)
-        unpicked_passengers_manhattan = 0
-        for pas in unpicked_passengers:
-            x = state["passengers"][pas]
-            unpicked_passengers_manhattan += self.manhattan(x["location"], x["destination"])
-        picked_and_destination_manhattan = 0
-        for pas in picked_or_delivered:
-            x = state["passengers"][pas]
-            picked_and_destination_manhattan += self.manhattan(x["location"], x["destination"])
+            if not state["passengers"][passenger][1]:
+                sum_D_i += self.manhattan(state["passengers"][passenger][0]["location"], state["passengers"][passenger][0]["destination"])
+            else:
+                sum_T_i += self.manhattan(state["passengers"][passenger][0]["location"], state["passengers"][passenger][0]["destination"])
 
-        taxis_sum = len(state["taxis"])
-        return (unpicked_passengers_manhattan+ picked_and_destination_manhattan)/taxis_sum
+        for taxi in state["taxis"]:
+            sum_of_capacity += self.capacity.get(taxi)
+        return(sum_D_i + sum_T_i)/sum_of_capacity
+
+        # passengers_names = list(state["passengers"].keys())
+        # picked_passengers = self.flatten([tax[1][1] for tax in [taxi for taxi in state["taxis"].items()]])
+        # delivered_passengers = []
+        # for passenger in state["passengers"]:
+        #     passeng = state["passengers"][passenger]
+        #     if passeng["location"] == passeng["destination"]:
+        #         # is passenger in taxi?
+        #         for taxi in state["taxis"]:
+        #             if passenger in taxi[1]:
+        #                 break
+        #         delivered_passengers.append(passenger)
+        # picked_or_delivered = picked_passengers + delivered_passengers
+        #
+        # unpicked_passengers = self.subtract(passengers_names, picked_or_delivered)
+        # unpicked_passengers_manhattan = 0
+        # for pas in unpicked_passengers:
+        #     x = state["passengers"][pas]
+        #     unpicked_passengers_manhattan += self.manhattan(x["location"], x["destination"])
+        # picked_and_destination_manhattan = 0
+        # for pas in picked_or_delivered:
+        #     x = state["passengers"][pas]
+        #     picked_and_destination_manhattan += self.manhattan(x["location"], x["destination"])
+        #
+        # taxis_sum = len(state["taxis"])
+        # return (unpicked_passengers_manhattan + picked_and_destination_manhattan) / taxis_sum
 
     """Feel free to add your own functions
     (-2, -2, None) means there was a timeout"""
@@ -179,4 +199,3 @@ class TaxiProblem(search.Problem):
 
 def create_taxi_problem(game):
     return TaxiProblem(game)
-

@@ -19,8 +19,8 @@ class TaxiProblem(search.Problem):
         self.map = np.array(initial["map"])
         taxis = initial["taxis"]
         # fuel level changing bugs the priority queue
-        # taxis = {taxi: (taxis.get(taxi), [], taxis.get(taxi)["fuel"]) for taxi in taxis.keys()}
         taxis = {taxi: (taxis.get(taxi), []) for taxi in taxis.keys()}
+        self.fuels = {taxi: (taxis.get(taxi)[0]['fuel']) for taxi in taxis.keys()}
         passengers = initial["passengers"]
         # boolean False to indicate passenger wasn't picked yet
         passengers = {passenger: (passengers.get(passenger), False) for passenger in passengers.keys()}
@@ -84,9 +84,7 @@ class TaxiProblem(search.Problem):
                 if taxi == "wait":
                     continue
                 else:
-                    # todo: arrange fuel bug
-                    # state["taxis"][taxi][2] = state["taxis"][taxi][0]["fuel"]
-                    state["taxis"][taxi][0]["fuel"] = 15
+                    state["taxis"][taxi][0]["fuel"] = self.fuels.get(taxi)
                     continue
 
             taxi = taxi_a[1]

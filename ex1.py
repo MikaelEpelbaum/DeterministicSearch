@@ -74,18 +74,20 @@ class TaxiProblem(search.Problem):
 
         # todo: remove impossible moves if two taxis go to the same tile
         cart_copy = cartesian.copy()
-        for cart in cartesian:
-            if len(cart) > 1:
-                moves = []
-                for ac in cart:
-                    if ac[0] == 'move':
-                        moves.append(ac[2])
-                    if ac[0] == 'wait' or ac[0] == 'pick up' or ac[0] == 'refuel' or ac[0] == 'drop off':
-                        moves.append(tuple(state['taxis'][ac[1]][0]['location']))
-            moves_length = len(moves)
-            moves_reduced = len(set(moves))
-            if moves_length > moves_reduced:
-                cart_copy.remove(cart)
+        if len(state['taxis']) == 1:
+            for cart in cartesian:
+                if len(cart) > 1:
+                    moves = []
+                    for ac in cart:
+                        if ac[0] == 'move':
+                            moves.append(ac[2])
+                        if ac[0] == 'wait' or ac[0] == 'pick up' or ac[0] == 'refuel' or ac[0] == 'drop off':
+                            moves.append(tuple(state['taxis'][ac[1]][0]['location']))
+                    moves_length = len(moves)
+                    moves_reduced = len(set(moves))
+                    if moves_length > moves_reduced:
+                        cart_copy.remove(cart)
+            cartesian = cart_copy
         return cartesian
         # return [a for a in itertools.product(*cartesian)]
 

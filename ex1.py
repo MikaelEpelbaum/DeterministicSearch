@@ -21,6 +21,7 @@ class TaxiProblem(search.Problem):
         # fuel level changing bugs the priority queue
         taxis = {taxi: (taxis.get(taxi), []) for taxi in taxis.keys()}
         self.fuels = {taxi: (taxis.get(taxi)[0]['fuel']) for taxi in taxis.keys()}
+        self.capacity = {taxi: (taxis.get(taxi)[0]['capacity']) for taxi in taxis.keys()}
         passengers = initial["passengers"]
         # boolean False to indicate passenger wasn't picked yet
         passengers = {passenger: (passengers.get(passenger), False) for passenger in passengers.keys()}
@@ -42,6 +43,8 @@ class TaxiProblem(search.Problem):
         passengers = state["passengers"]
         passengers_to_collect = {passenger for passenger in passengers if not passengers.get(passenger)[1]}
         refuel = []
+        global_actions = {}
+        impossibles = tuple(zip(*np.where(self.map == 'I')))
         for taxi, taxi_details in taxis_dict.items():
             curr_pos = np.asarray(taxi_details[0]["location"])
             # curr_fuel = taxi_details[2]
@@ -49,7 +52,7 @@ class TaxiProblem(search.Problem):
             all_moves = [curr_pos + np.asarray(step) for step in steps]
             # all possible direction movement listing
             for move in all_moves:
-                if 0 <= move[0] < n and 0 <= move[1] < m:
+                if 0 <= move[0] < n and 0 <= move[1] < m and tuple(move) not in impossibles:
                     taxis_actions[taxi].append(("move", taxi, tuple(move)))
             # passegers that can be piked listing
             passengers_to_pick = [passenger for passenger in passengers_to_collect if tuple(passengers[passenger][0]["location"]) == tuple(curr_pos)]
@@ -57,18 +60,22 @@ class TaxiProblem(search.Problem):
                 taxis_actions[taxi].append(("pick up", taxi, pas))
             # does the taxi has passengers?
             if len(taxis_dict[taxi][1]) > 0:
-                to_drop_off = [passenger for passenger, loc_pos in passengers.items() if loc_pos[0]["destination"] == loc_pos[0]["location"]]
+                to_drop_off = [passenger for passenger, loc_pos in passengers.items() if loc_pos[0]["destination"] == loc_pos[0]["location"] and passenger in taxis_dict[taxi][1]]
                 for pas in to_drop_off:
                     taxis_actions[taxi].append(("drop off", taxi, pas))
             if self.map[tuple([taxis_dict[taxi][0]["location"]][0])] == 'G':
                 refuel = [("refuel", taxi)]
-        all_actions = [a for a in taxis_actions.values()]
-        impossibles = tuple(zip(*np.where(self.map == 'I')))
-        possible_acctions = [action for action in all_actions[0] if action[2] not in impossibles]
-        waits = list(("wait", taxi) for taxi in taxis_dict.keys())
-        possible_acctions = [possible_acctions + waits + refuel]
 
-        return [a for a in itertools.product(*possible_acctions)]
+            global_actions[taxi] = [taxis_actions[taxi] + [("wait", taxi)] + refuel]
+
+        all_moves = [global_actions[act][0] for act in global_actions.keys()]
+        cartesian = [element for element in itertools.product(*all_moves)]
+                    
+
+        # todo: remove impossible moves if two taxis go to the same tile
+
+        return cartesian
+        # return [a for a in itertools.product(*cartesian)]
 
     def result(self, state, action):
         """Return the state that results from executing the given
@@ -76,25 +83,52 @@ class TaxiProblem(search.Problem):
         self.actions(state)."""
         state = eval(state)
         state = json.loads(json.dumps(state))
+
+        # if action[0][2] == (3, 0) and action[1][2] == (0, 0):
+        # if action[0][0] == "pick up" and action[0][2] == "Tamar" and action[1][0] == "pick up" and action[1][2] == "Iris":
+        # if len(action[0]) > 2 and len(action[1]) > 2:
+        #     if action[0][0] == "pick up" and action[0][2] == "Tamar" and action[1][0] == "pick up" and action[1][2] == "Iris":
+        #         if state["taxis"]["taxi 1"][0]["fuel"] == 4 and state["taxis"]["taxi 2"][0]["fuel"] == 5:
+        #             print("ok")
+        # if len(action[0]) > 2 and len(action[1]) > 2:
+        #     if action[0][2] == (3, 1) and action[1][2] == (0, 1):
+        #         if state["taxis"]["taxi 1"][0]["fuel"] == 4 and state["taxis"]["taxi 2"][0]["fuel"] == 5:
+        #             print('')
+        # if len(action[0]) > 2 and len(action[1]) > 2:
+        #     if action[0][0] == "pick up" and action[0][2] == "Daniel" and "Tamar" in state["taxis"]["taxi 1"][1] and "Iris" in state["taxis"]["taxi 2"][1]:
+        #         print('k')
+        # if len(action[0]) > 2 and len(action[1]) > 2:
+        #     if "Tamar" in state["taxis"]["taxi 1"][1] and "Daniel" in state["taxis"]["taxi 1"][1] and "Iris" in state["taxis"]["taxi 2"][1]:
+        #         if tuple(state["taxis"]["taxi 1"][0]['location']) == (3,1) and tuple(state["taxis"]["taxi 2"][0]['location']) == (0,2):
+        #             print('k')
+        # if len(action[0]) > 2 and len(action[1]) > 2:
+        #     if "Tamar" in state["taxis"]["taxi 1"][1] and "Daniel" in state["taxis"]["taxi 1"][1] and "Iris" in state["taxis"]["taxi 2"][1]:
+        #         if tuple(state["taxis"]["taxi 1"][0]['location']) == (2, 1) and tuple(state["taxis"]["taxi 2"][0]['location']) == (0,3):
+        #             print('k')
+        # if len(action[0]) > 2 and len(action[1]) > 2:
+        #     if "Tamar" in state["taxis"]["taxi 1"][1] and "Daniel" in state["taxis"]["taxi 1"][1] and "Iris" in state["taxis"]["taxi 2"][1]:
+        #         if tuple(state["taxis"]["taxi 1"][0]['location']) == (2, 1) and tuple(state["taxis"]["taxi 2"][0]['location']) == (1,3):
+        #             print('k')
+
+
         # it's a for because there may be more than one taxi thus actions
         for taxi_a in action:
 
             if len(taxi_a) < 3:
+                act = taxi_a[0]
                 taxi = taxi_a[1]
-                if taxi == "wait":
+                if act == "wait":
                     continue
                 else:
                     state["taxis"][taxi][0]["fuel"] = self.fuels.get(taxi)
                     continue
 
             taxi = taxi_a[1]
-            pos = state["taxis"][taxi][0]["location"]
 
-            if taxi_a[0] == "pick up":
+            if taxi_a[0] == "pick up" and len(state["taxis"][taxi][1]) < state["taxis"][taxi][0]["capacity"]:
                 passenger = taxi_a[2]
                 state["taxis"][taxi][1].append(passenger)
                 state["passengers"][passenger][1] = True
-
 
             if taxi_a[0] == "move" and state["taxis"][taxi][0]["fuel"] > 0:
                 state["taxis"][taxi][0]["location"] = list(taxi_a[2])
@@ -107,8 +141,9 @@ class TaxiProblem(search.Problem):
             if taxi_a[0] == "drop off":
                 passenger = taxi_a[2]
                 del state["passengers"][passenger]
-                state['taxis'][taxi_a[1]][1].remove(passenger)
+                state['taxis'][taxi][1].remove(passenger)
                 state['remains'] -= 1
+
         return repr(state)
 
     def goal_test(self, state):
@@ -138,31 +173,49 @@ class TaxiProblem(search.Problem):
         This is a slightly more sophisticated Manhattan heuristic
         """
         state = eval(node.state)
-    #  sum(D(I))   manhattan distance unpicked passengers from destination
-        passengers_names = list(state["passengers"].keys())
-        picked_passengers = self.flatten([tax[1][1] for tax in [taxi for taxi in state["taxis"].items()]])
-        delivered_passengers = []
+        #  sum(D(I))   manhattan distance unpicked passengers from destination
+        sum_D_i = 0
+        sum_T_i = 0
+        sum_of_capacity = 0
         for passenger in state["passengers"]:
-            passeng = state["passengers"][passenger]
-            if passeng["location"] == passeng["destination"]:
-                # is passenger in taxi?
-                for taxi in state["taxis"]:
-                    if passenger in taxi[1]:
-                        break
-                delivered_passengers.append(passenger)
-        picked_or_delivered = picked_passengers + delivered_passengers
-        unpicked_passengers = self.subtract(passengers_names, picked_or_delivered)
-        unpicked_passengers_manhattan = 0
-        for pas in unpicked_passengers:
-            x = state["passengers"][pas]
-            unpicked_passengers_manhattan += self.manhattan(x["location"], x["destination"])
-        picked_and_destination_manhattan = 0
-        for pas in picked_or_delivered:
-            x = state["passengers"][pas]
-            picked_and_destination_manhattan += self.manhattan(x["location"], x["destination"])
+            if not state["passengers"][passenger][1]:
+                sum_D_i += self.manhattan(state["passengers"][passenger][0]["location"], state["passengers"][passenger][0]["destination"])
+            else:
+                sum_T_i += self.manhattan(state["passengers"][passenger][0]["location"], state["passengers"][passenger][0]["destination"])
 
-        taxis_sum = len(state["taxis"])
-        return (unpicked_passengers_manhattan+ picked_and_destination_manhattan)/taxis_sum
+        for taxi in state["taxis"]:
+            sum_of_capacity += self.capacity.get(taxi)
+        return(sum_D_i + sum_T_i)/sum_of_capacity
+
+    #     """
+    #     This is a slightly more sophisticated Manhattan heuristic
+    #     """
+    #     state = eval(node.state)
+    # #  sum(D(I))   manhattan distance unpicked passengers from destination
+    #     passengers_names = list(state["passengers"].keys())
+    #     picked_passengers = self.flatten([tax[1][1] for tax in [taxi for taxi in state["taxis"].items()]])
+    #     delivered_passengers = []
+    #     for passenger in state["passengers"]:
+    #         passeng = state["passengers"][passenger]
+    #         if passeng["location"] == passeng["destination"]:
+    #             # is passenger in taxi?
+    #             for taxi in state["taxis"]:
+    #                 if passenger in taxi[1]:
+    #                     break
+    #             delivered_passengers.append(passenger)
+    #     picked_or_delivered = picked_passengers + delivered_passengers
+    #     unpicked_passengers = self.subtract(passengers_names, picked_or_delivered)
+    #     unpicked_passengers_manhattan = 0
+    #     for pas in unpicked_passengers:
+    #         x = state["passengers"][pas]
+    #         unpicked_passengers_manhattan += self.manhattan(x["location"], x["destination"])
+    #     picked_and_destination_manhattan = 0
+    #     for pas in picked_or_delivered:
+    #         x = state["passengers"][pas]
+    #         picked_and_destination_manhattan += self.manhattan(x["location"], x["destination"])
+    #
+    #     taxis_sum = len(state["taxis"])
+    #     return (unpicked_passengers_manhattan+ picked_and_destination_manhattan)/taxis_sum
 
     """Feel free to add your own functions
     (-2, -2, None) means there was a timeout"""
